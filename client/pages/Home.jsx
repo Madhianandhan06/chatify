@@ -6,6 +6,15 @@ const SOCKET_URL = 'ws://localhost:3000'
 function getId(value) {
   return value == null ? '' : String(value)
 }
+export const formatChatTimeOnly = (timestamp) => {
+  if (!timestamp) return '';
+  
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+};
 
 function Home({ user }) {
   const currentUserId = getId(user?._id)
@@ -13,8 +22,11 @@ function Home({ user }) {
   
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
-  console.log(selectedUser);
-  
+  const [onlineUsers, setOnlineUsers] = useState([])
+  // Keep the latest message and unread count per conversation so the people
+  // list can show updates even when that conversation is not currently open.
+  const [conversationPreviews, setConversationPreviews] = useState({})
+
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [usersLoading, setUsersLoading] = useState(true)
@@ -30,6 +42,65 @@ function Home({ user }) {
   
   const conversationRequestRef = useRef(0)
   const messagesEndRef = useRef(null)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadConversationPreviews() {
+      try {
+        const response = await fetch(`${API_URL}/messages/recent`, {
+          credentials: 'include',
+        })
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Could not load recent messages.')
+        }
+        if (!Array.isArray(data)) {
+          throw new Error('Unexpected response while loading recent messages.')
+        }
+
+        if (active) {
+          setConversationPreviews((current) => {
+            const previews = { ...current }
+
+            for (const conversation of data) {
+              const userId = getId(conversation.userId)
+              const existingPreview = previews[userId]
+              const existingTime = existingPreview?.createdAt
+                ? new Date(existingPreview.createdAt).getTime()
+                : 0
+              const messageTime = conversation.createdAt
+                ? new Date(conversation.createdAt).getTime()
+                : 0
+
+              // A WebSocket message may arrive while this request is loading.
+              // Keep whichever preview represents the newer message.
+              if (existingPreview && existingTime >= messageTime) continue
+
+              previews[userId] = {
+                latestMessage: conversation.text,
+                latestMessageIsOwn: getId(conversation.sender) === currentUserId,
+                createdAt: conversation.createdAt,
+                unreadCount: existingPreview?.unreadCount || 0,
+              }
+            }
+
+            return previews
+          })
+        }
+      } catch (error) {
+        if (active) {
+          console.error('Failed to load recent messages:', error)
+        }
+      }
+    }
+
+    loadConversationPreviews()
+    return () => {
+      active = false
+    }
+  }, [currentUserId])
 
   useEffect(() => {
     let active = true
@@ -87,20 +158,60 @@ function Home({ user }) {
           setSocketError(payload.message || 'Message could not be sent.')
           return
         }
+        if (payload.type === 'onlineUsers') {
+          setOnlineUsers(payload.users)
+          return
+        }
 
         const message = payload.message
+
+        if (payload.type !== 'chat' || !message) return
+
         const selectedId = getId(selectedUserRef.current?._id)
         const senderId = getId(message?.sender)
         const receiverId = getId(message?.receiver)
-        const belongsToOpenChat = selectedId
-          && currentUserId
-          && ((senderId === currentUserId && receiverId === selectedId)
-            || (senderId === selectedId && receiverId === currentUserId))
+        // A chat is keyed by the other participant, whether this message was
+        // sent by the current user or received from someone else.
+        const conversationUserId = senderId === currentUserId
+          ? receiverId
+          : senderId
 
-        if (payload.type !== 'chat' || !message || !belongsToOpenChat) return
+        // Treat messages in the selected conversation as read immediately.
+        // Messages from the current user update the preview but never add unread.
+        const belongsToOpenChat =
+          selectedId &&
+          currentUserId &&
+          (
+            (senderId === currentUserId && receiverId === selectedId) ||
+            (senderId === selectedId && receiverId === currentUserId)
+          )
+
+        if (conversationUserId) {
+          const isUnread = senderId !== currentUserId && !belongsToOpenChat
+
+          // Use the functional updater so rapid WebSocket messages increment
+          // the latest count rather than overwriting one another with stale state.
+          setConversationPreviews((current) => {
+            const previous = current[conversationUserId]
+
+            return {
+              ...current,
+              [conversationUserId]: {
+                latestMessage: message.text,
+                latestMessageIsOwn: senderId === currentUserId,
+                createdAt: message.createdAt,
+                unreadCount: (previous?.unreadCount || 0) + (isUnread ? 1 : 0),
+              },
+            }
+          })
+        }
+
+        if (!belongsToOpenChat) return
 
         setMessages((current) => (
-          current.some((existing) => getId(existing._id) === getId(message._id))
+          current.some(
+            (existing) => getId(existing._id) === getId(message._id)
+          )
             ? current
             : [...current, message]
         ))
@@ -142,6 +253,17 @@ function Home({ user }) {
     conversationRequestRef.current = requestId
     selectedUserRef.current = otherUser
     setSelectedUser(otherUser)
+    // Clear this conversation's badge as soon as it is opened; leave its
+    // latest-message preview intact for the conversation list.
+    setConversationPreviews((current) => {
+      const preview = current[getId(otherUser._id)]
+      if (!preview?.unreadCount) return current
+
+      return {
+        ...current,
+        [getId(otherUser._id)]: { ...preview, unreadCount: 0 },
+      }
+    })
     setMessages([])
     setDraft('')
     setConversationError('')
@@ -240,22 +362,44 @@ function Home({ user }) {
             <ul className="space-y-1">
               {users.map((person) => {
                 const isSelected = getId(selectedUser?._id) === getId(person._id)
-
+                const personId = getId(person._id)
+                const isOnline = onlineUsers.some((onlineId) => getId(onlineId) === personId)
+                const preview = conversationPreviews[personId]
                 return (
                   <li key={person._id}>
                     <button
                       type="button"
                       onClick={() => openConversation(person)}
                       aria-current={isSelected ? 'true' : undefined}
-                      className={`w-full rounded-lg px-3 py-3 text-left transition ${
-                        isSelected
+                      className={`w-full rounded-lg px-3 py-3 text-left transition 
+                        ${ isSelected
                           ? 'bg-blue-50 text-blue-900'
-                          : 'hover:bg-slate-100'
-                      }`}
+                          : 'hover:bg-slate-100'}
+                      `}
                     >
-                      <span className="block truncate font-medium">{person.name}</span>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        Open conversation
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium">{person.name}</span>
+                        {/* Keep the badge hidden at zero and cap its visual width
+                            for large counts while retaining the exact count for assistive tech. */}
+                        {preview?.unreadCount > 0 && (
+                          <span
+                            aria-label={`${preview.unreadCount} unread messages`}
+                            className="inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 px-1.5 text-xs font-semibold text-white"
+                          >
+                            {preview.unreadCount > 99 ? '99+' : preview.unreadCount}
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-1 flex items-center justify-between gap-2">
+                        <span className="truncate text-xs text-green-500">
+                          {isOnline ? 'online' : ''}
+                        </span>
+                        {/* Show the most recently received/sent text for this person. */}
+                        {preview && (
+                          <span className="shrink-0 max-w-40 truncate text-xs text-slate-600">
+                            {preview.latestMessageIsOwn ? 'You: ' : ''}{preview.latestMessage}
+                          </span>
+                        )}
                       </span>
                     </button>
                   </li>
@@ -317,8 +461,10 @@ function Home({ user }) {
                           : 'bg-white text-slate-900 shadow-sm'
                       }`}
                       >
-                        {message.text}
+                        <span>{message.text}</span>
+                        <span className="ml-2 mt-2 text-xs opacity-75">{formatChatTimeOnly(message.createdAt)}</span>
                       </p>
+                      
                     </div>
                   )
                 })}

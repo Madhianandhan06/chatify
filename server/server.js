@@ -80,7 +80,22 @@ wss.on('connection', (socket, request) => {
 
     socket.userId = decoded.userId
 
+    function broadcastOnlineUsers() {
+      const onlineUserIds = [...onlineUsers.keys()]
+
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: 'onlineUsers',
+            users: onlineUserIds
+          }))
+        }
+      })
+    }
+
     onlineUsers.set(socket.userId, socket)
+    broadcastOnlineUsers()
+    
     console.log(`Online users:` , [...onlineUsers.keys()])
     console.log('Authenticated user:', socket.userId)
 
@@ -130,7 +145,7 @@ wss.on('connection', (socket, request) => {
 
     socket.on('close', () => {
     onlineUsers.delete(socket.userId)
-
+    broadcastOnlineUsers()
     console.log('User disconnected:', socket.userId)
   })
 

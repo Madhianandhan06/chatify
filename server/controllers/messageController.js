@@ -38,3 +38,54 @@ export const getConversation = async (req, res) => {
     })
   }
 }
+
+export const getRecentConversations = async (req, res) => {
+  try {
+    const currentUserId = req.user._id
+
+    const conversations = await Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { sender: currentUserId },
+            { receiver: currentUserId }
+          ]
+        }
+      },
+      { $sort: { createdAt: -1, _id: -1 } },
+      {
+        $addFields: {
+          conversationUserId: {
+            $cond: [
+              { $eq: ['$sender', currentUserId] },
+              '$receiver',
+              '$sender'
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$conversationUserId',
+          latestMessage: { $first: '$$ROOT' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          userId: '$_id',
+          text: '$latestMessage.text',
+          sender: '$latestMessage.sender',
+          createdAt: '$latestMessage.createdAt'
+        }
+      }
+    ])
+
+    res.json(conversations)
+  } catch (error) {
+    console.error('Failed to fetch recent conversations:', error)
+    res.status(500).json({
+      message: 'Failed to fetch recent conversations'
+    })
+  }
+}
