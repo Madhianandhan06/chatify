@@ -22,7 +22,7 @@ function Home({ user }) {
   
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(null)
-  const [onlineUsers, setOnlineUsers] = useState([])
+  const [onlineUsers, setOnlineUsers] = useState(new Set())
   // Keep the latest message and unread count per conversation so the people
   // list can show updates even when that conversation is not currently open.
   const [conversationPreviews, setConversationPreviews] = useState({})
@@ -159,7 +159,7 @@ function Home({ user }) {
           return
         }
         if (payload.type === 'onlineUsers') {
-          setOnlineUsers(payload.users)
+          setOnlineUsers(new Set(payload.users))
           return
         }
 
@@ -363,7 +363,7 @@ function Home({ user }) {
               {users.map((person) => {
                 const isSelected = getId(selectedUser?._id) === getId(person._id)
                 const personId = getId(person._id)
-                const isOnline = onlineUsers.some((onlineId) => getId(onlineId) === personId)
+                const isOnline = onlineUsers.has(personId)
                 const preview = conversationPreviews[personId]
                 return (
                   <li key={person._id}>
