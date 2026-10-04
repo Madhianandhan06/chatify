@@ -16,5 +16,9 @@ const msgSchema = new mongoose.Schema({
         required: true,
         maxlength: 500,
     },
+    read: {
+        type: Boolean,
+        default: false
+    }
 }, { timestamps: true })
 export default mongoose.model('Message', msgSchema)
