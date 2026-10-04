@@ -5,6 +5,12 @@ and import `src/index.css` in the app entry point (already configured).
 
 Run the client with `npm run dev`; create a production build with `npm run build`.
 
+## Deploying the frontend
+
+Set the `VITE_API_URL` environment variable in Vercel to the deployed backend
+URL (for example, `https://chatify-v10g.onrender.com`), then redeploy. For local
+development, the client defaults to `http://localhost:3000`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
