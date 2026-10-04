@@ -78,6 +78,42 @@ export const getRecentConversations = async (req, res) => {
           sender: '$latestMessage.sender',
           createdAt: '$latestMessage.createdAt'
         }
+      },{
+        $lookup: {
+          from: 'messages',
+          let: { otherUserId: '$userId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$sender', '$$otherUserId'] },
+                    { $eq: ['$receiver', currentUserId] },
+                    { $eq: ['$read', false] }
+                  ]
+                }
+              }
+            },
+            {
+              $count: 'count'
+            }
+          ],
+          as: 'unread'
+        }
+      },
+      {
+        $project: {
+          userId: 1,
+          text: 1,
+          sender: 1,
+          createdAt: 1,
+          unreadCount: {
+            $ifNull: [
+              { $arrayElemAt: ['$unread.count', 0] },
+              0
+            ]
+          }
+        }
       }
     ])
 
@@ -86,6 +122,32 @@ export const getRecentConversations = async (req, res) => {
     console.error('Failed to fetch recent conversations:', error)
     res.status(500).json({
       message: 'Failed to fetch recent conversations'
+    })
+  }
+}
+
+export const markMessagesAsRead = async (req, res) => {
+  try {
+    const currentUserId = req.user._id
+    const otherUserId = req.params.userId
+
+    await Message.updateMany(
+      {
+        sender: otherUserId,
+        receiver: currentUserId,
+        read: false
+      },
+      {
+        $set: { read: true }
+      }
+    )
+
+    res.json({ message: 'Messages marked as read' })
+  } catch (error) {
+    console.error('Failed to mark messages as read:', error)
+
+    res.status(500).json({
+      message: 'Failed to mark messages as read'
     })
   }
 }

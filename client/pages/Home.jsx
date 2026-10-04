@@ -24,7 +24,6 @@ function Home({ user }) {
   // Keep the latest message and unread count per conversation so the people
   // list can show updates even when that conversation is not currently open.
   const [conversationPreviews, setConversationPreviews] = useState({})
-
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [usersLoading, setUsersLoading] = useState(true)
@@ -58,6 +57,8 @@ function Home({ user }) {
           throw new Error('Unexpected response while loading recent messages.')
         }
 
+        console.log(data);
+        
         if (active) {
           setConversationPreviews((current) => {
             const previews = { ...current }
@@ -65,6 +66,7 @@ function Home({ user }) {
             for (const conversation of data) {
               const userId = getId(conversation.userId)
               const existingPreview = previews[userId]
+              
               const existingTime = existingPreview?.createdAt
                 ? new Date(existingPreview.createdAt).getTime()
                 : 0
@@ -80,10 +82,9 @@ function Home({ user }) {
                 latestMessage: conversation.text,
                 latestMessageIsOwn: getId(conversation.sender) === currentUserId,
                 createdAt: conversation.createdAt,
-                unreadCount: existingPreview?.unreadCount || 0,
+                unreadCount: conversation.unreadCount ?? existingPreview?.unreadCount ?? 0,
               }
             }
-
             return previews
           })
         }
@@ -100,6 +101,8 @@ function Home({ user }) {
     }
   }, [currentUserId])
 
+  console.log(conversationPreviews);
+  
   useEffect(() => {
     let active = true
 
@@ -190,8 +193,7 @@ function Home({ user }) {
           // Use the functional updater so rapid WebSocket messages increment
           // the latest count rather than overwriting one another with stale state.
           setConversationPreviews((current) => {
-            const previous = current[conversationUserId]
-
+            const previous = current[conversationUserId]        
             return {
               ...current,
               [conversationUserId]: {
@@ -283,6 +285,10 @@ function Home({ user }) {
       if (conversationRequestRef.current === requestId) {
         setMessages(data)
       }
+      await fetch(`${API_URL}/messages/${otherUser._id}/read`, {
+        method: 'PATCH',
+        credentials: 'include',
+      })
     } catch (error) {
       if (conversationRequestRef.current === requestId) {
         setConversationError(error.message || 'Could not load this conversation.')
@@ -376,9 +382,28 @@ function Home({ user }) {
                       `}
                     >
                       <span className="flex items-center justify-between gap-2">
-                        <span className="truncate font-medium">{person.name}</span>
+                        <p className="truncate font-medium">
+                          {person.name}
+                          <span className="truncate ml-2 text-xs text-green-500">
+                            {isOnline ? 'online' : ''}
+                          </span>
+                        </p>
+
                         {/* Keep the badge hidden at zero and cap its visual width
                             for large counts while retaining the exact count for assistive tech. */}
+
+                        {preview?.createdAt && (
+                          <span className="text-xs">{formatChatTimeOnly(preview.createdAt)}</span>
+                        )}
+
+                      </span>
+                      <span className="mt-1 flex items-center justify-between gap-2">
+                        {/* Show the most recently received/sent text for this person. */}
+                        {preview && (
+                          <span className="shrink-0 max-w-40 truncate text-xs text-slate-600">
+                            {preview.latestMessageIsOwn ? 'You: ' : ''}{preview.latestMessage}
+                          </span>
+                        )}
                         {preview?.unreadCount > 0 && (
                           <span
                             aria-label={`${preview.unreadCount} unread messages`}
@@ -387,17 +412,7 @@ function Home({ user }) {
                             {preview.unreadCount > 99 ? '99+' : preview.unreadCount}
                           </span>
                         )}
-                      </span>
-                      <span className="mt-1 flex items-center justify-between gap-2">
-                        <span className="truncate text-xs text-green-500">
-                          {isOnline ? 'online' : ''}
-                        </span>
-                        {/* Show the most recently received/sent text for this person. */}
-                        {preview && (
-                          <span className="shrink-0 max-w-40 truncate text-xs text-slate-600">
-                            {preview.latestMessageIsOwn ? 'You: ' : ''}{preview.latestMessage}
-                          </span>
-                        )}
+
                       </span>
                     </button>
                   </li>
