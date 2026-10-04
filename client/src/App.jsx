@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AuthPage from './AuthPage'
 import Home from '../pages/Home'
+import { API_URL } from './apiConfig'
 
 function ProtectedRoute({ user, loading, children }) {
   if (loading) {
@@ -20,7 +21,7 @@ function App() {
 
     async function checkAuth() {
       try {
-        const res = await fetch('http://localhost:3000/auth/me', {
+        const res = await fetch(`${API_URL}/auth/me`, {
           method: 'GET',
           credentials: 'include',
         })

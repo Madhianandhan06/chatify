@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-
-const API_URL = 'http://localhost:3000'
-const SOCKET_URL = 'ws://localhost:3000'
+import { API_URL, SOCKET_URL } from '../src/apiConfig'
 
 function getId(value) {
   return value == null ? '' : String(value)
