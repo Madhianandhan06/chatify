@@ -1,1 +1,1 @@
-live site link: https://jobcommerce.vercel.app
+live site link: https://chatify-mu-two.vercel.app/
