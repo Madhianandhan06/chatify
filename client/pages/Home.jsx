@@ -173,9 +173,7 @@ function Home({ user }) {
         const receiverId = getId(message?.receiver)
         // A chat is keyed by the other participant, whether this message was
         // sent by the current user or received from someone else.
-        const conversationUserId = senderId === currentUserId
-          ? receiverId
-          : senderId
+        const conversationUserId = senderId === currentUserId ? receiverId : senderId
 
         // Treat messages in the selected conversation as read immediately.
         // Messages from the current user update the preview but never add unread.
@@ -207,14 +205,7 @@ function Home({ user }) {
         }
 
         if (!belongsToOpenChat) return
-
-        setMessages((current) => (
-          current.some(
-            (existing) => getId(existing._id) === getId(message._id)
-          )
-            ? current
-            : [...current, message]
-        ))
+        setMessages((current) => (current.some((existing) => getId(existing._id) === getId(message._id)) ? current : [...current, message]))
       } catch (error) {
         console.error('Invalid WebSocket payload:', error)
       }
@@ -369,6 +360,8 @@ function Home({ user }) {
                 const personId = getId(person._id)
                 const isOnline = onlineUsers.has(personId)
                 const preview = conversationPreviews[personId]
+                console.log(preview);
+                
                 return (
                   <li key={person._id}>
                     <button
