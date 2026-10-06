@@ -55,7 +55,16 @@ function App() {
   return (
     <div className="bg-slate-100 min-h-screen">
       <Routes>
-        <Route path="/" element={<AuthPage onAuthSuccess={handleAuthSuccess} />} />
+        <Route
+          path="/"
+          element={
+            loading
+              ? <p>Checking authentication...</p>
+              : user
+                ? <Navigate to="/home" replace />
+                : <AuthPage onAuthSuccess={handleAuthSuccess} />
+          }
+        />
         <Route path="/home" element={<ProtectedRoute user={user} loading={loading}><Home user={user} /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
