@@ -26,12 +26,21 @@ function Home({ user }) {
   const [conversationPreviews, setConversationPreviews] = useState({})
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [usersLoading, setUsersLoading] = useState(true)
   const [conversationLoading, setConversationLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
   const [conversationError, setConversationError] = useState('')
   const [socketConnected, setSocketConnected] = useState(false)
   const [socketError, setSocketError] = useState('')
+
+  const filteredUsers = users.filter((person) => {
+    const name = typeof person?.name === 'string' ? person.name : ''
+    const query = searchQuery.trim().toLowerCase()
+
+    if (!query) return true
+    return name.toLowerCase().includes(query)
+  })
 
   const socketRef = useRef(null)
   const selectedUserRef = useRef(null)
@@ -340,6 +349,20 @@ function Home({ user }) {
           </header>
 
           <section className="flex-1 overflow-y-auto p-3">
+            <div className="px-2 pb-3">
+              <label htmlFor="people-search" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Search people
+              </label>
+              <input
+                id="people-search"
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Type a name…"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              />
+            </div>
+
             <h2 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               People
             </h2>
@@ -353,9 +376,12 @@ function Home({ user }) {
             {!usersLoading && !usersError && users.length === 0 && (
               <p className="px-2 py-4 text-sm text-slate-500">No other users yet.</p>
             )}
+            {!usersLoading && !usersError && filteredUsers.length === 0 && users.length > 0 && (
+              <p className="px-2 py-4 text-sm text-slate-500">No people match “{searchQuery.trim()}”.</p>
+            )}
 
             <ul className="space-y-1">
-              {users.map((person) => {
+              {filteredUsers.map((person) => {
                 const isSelected = getId(selectedUser?._id) === getId(person._id)
                 const personId = getId(person._id)
                 const isOnline = onlineUsers.has(personId)
