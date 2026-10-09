@@ -423,10 +423,10 @@ function Home({ user }) {
                     >
                       <span className="flex items-center justify-between gap-2">
                         <p className="truncate font-medium">
+                            { isOnline ? <span className="truncate mr-2 text-xs text-green-500">
+                              {isOnline ? 'online' : ''}
+                            </span> : ''}
                           {person.name}
-                          <span className="truncate ml-2 text-xs text-green-500">
-                            {isOnline ? 'online' : ''}
-                          </span>
                         </p>
 
                         {/* Keep the badge hidden at zero and cap its visual width
@@ -481,7 +481,8 @@ function Home({ user }) {
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-semibold">{selectedUser.name}</h2>
                   <p className="text-xs text-slate-500">
-                    {socketConnected ? 'Connected' : 'Reconnecting…'}
+                    {/* {socketConnected ? 'Connected' : 'Reconnecting…'} */}
+                    {onlineUsers.has(getId(selectedUser._id)) ? (<span className='text-green-600'>online</span>) : (<span className='text-red-600'>offline</span>)}
                   </p>
                 </div>
               </header>
