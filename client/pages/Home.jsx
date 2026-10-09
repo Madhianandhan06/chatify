@@ -27,6 +27,7 @@ function Home({ user }) {
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [onlineOnly, setOnlineOnly] = useState(false)
   const [usersLoading, setUsersLoading] = useState(true)
   const [conversationLoading, setConversationLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -38,8 +39,10 @@ function Home({ user }) {
     const name = typeof person?.name === 'string' ? person.name : ''
     const query = searchQuery.trim().toLowerCase()
 
-    if (!query) return true
-    return name.toLowerCase().includes(query)
+    return (
+      name.toLowerCase().includes(query) &&
+      (!onlineOnly || onlineUsers.has(getId(person?._id)))
+    )
   })
 
   const socketRef = useRef(null)
@@ -350,9 +353,23 @@ function Home({ user }) {
 
           <section className="flex-1 overflow-y-auto p-3">
             <div className="px-2 pb-3">
-              <label htmlFor="people-search" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Search people
-              </label>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <label htmlFor="people-search" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Search people
+                </label>
+                <button
+                  type="button"
+                  aria-pressed={onlineOnly}
+                  onClick={() => setOnlineOnly((current) => !current)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                    onlineOnly
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Online only
+                </button>
+              </div>
               <input
                 id="people-search"
                 type="text"
@@ -377,7 +394,11 @@ function Home({ user }) {
               <p className="px-2 py-4 text-sm text-slate-500">No other users yet.</p>
             )}
             {!usersLoading && !usersError && filteredUsers.length === 0 && users.length > 0 && (
-              <p className="px-2 py-4 text-sm text-slate-500">No people match “{searchQuery.trim()}”.</p>
+              <p className="px-2 py-4 text-sm text-slate-500">
+                {onlineOnly
+                  ? `No online people${searchQuery.trim() ? ` match “${searchQuery.trim()}”` : ' right now'}.`
+                  : `No people match “${searchQuery.trim()}”.`}
+              </p>
             )}
 
             <ul className="space-y-1">
