@@ -52,70 +52,7 @@ function Home({ user }) {
   const conversationRequestRef = useRef(0)
   const messagesEndRef = useRef(null)
 
-  useEffect(() => {
-    let active = true
-
-    async function loadConversationPreviews() {
-      try {
-        const response = await fetch(`${API_URL}/messages/recent`, {
-          credentials: 'include',
-        })
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.message || 'Could not load recent messages.')
-        }
-        if (!Array.isArray(data)) {
-          throw new Error('Unexpected response while loading recent messages.')
-        }
-
-        console.log(data);
-        
-        if (active) {
-          setConversationPreviews((current) => {
-            const previews = { ...current }
-
-            for (const conversation of data) {
-              const userId = getId(conversation.userId)
-              const existingPreview = previews[userId]
-              
-              const existingTime = existingPreview?.createdAt
-                ? new Date(existingPreview.createdAt).getTime()
-                : 0
-              const messageTime = conversation.createdAt
-                ? new Date(conversation.createdAt).getTime()
-                : 0
-
-              // A WebSocket message may arrive while this request is loading.
-              // Keep whichever preview represents the newer message.
-              if (existingPreview && existingTime >= messageTime) continue
-
-              previews[userId] = {
-                latestMessage: conversation.text,
-                latestMessageIsOwn: getId(conversation.sender) === currentUserId,
-                createdAt: conversation.createdAt,
-                unreadCount: conversation.unreadCount ?? existingPreview?.unreadCount ?? 0,
-              }
-            }
-            return previews
-          })
-        }
-      } catch (error) {
-        if (active) {
-          console.error('Failed to load recent messages:', error)
-        }
-      }
-    }
-
-    loadConversationPreviews()
-    return () => {
-      active = false
-    }
-  }, [currentUserId])
-
-  console.log(conversationPreviews);
-  
-  useEffect(() => {
+    useEffect(() => {
     let active = true
 
     async function loadUsers() {
@@ -246,6 +183,70 @@ function Home({ user }) {
       socket.close()
     }
   }, [currentUserId])
+  useEffect(() => {
+    let active = true
+
+    async function loadConversationPreviews() {
+      try {
+        const response = await fetch(`${API_URL}/messages/recent`, {
+          credentials: 'include',
+        })
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Could not load recent messages.')
+        }
+        if (!Array.isArray(data)) {
+          throw new Error('Unexpected response while loading recent messages.')
+        }
+
+        console.log(data);
+        
+        if (active) {
+          setConversationPreviews((current) => {
+            const previews = { ...current }
+
+            for (const conversation of data) {
+              const userId = getId(conversation.userId)
+              const existingPreview = previews[userId]
+              
+              const existingTime = existingPreview?.createdAt
+                ? new Date(existingPreview.createdAt).getTime()
+                : 0
+              const messageTime = conversation.createdAt
+                ? new Date(conversation.createdAt).getTime()
+                : 0
+
+              // A WebSocket message may arrive while this request is loading.
+              // Keep whichever preview represents the newer message.
+              if (existingPreview && existingTime >= messageTime) continue
+
+              previews[userId] = {
+                latestMessage: conversation.text,
+                latestMessageIsOwn: getId(conversation.sender) === currentUserId,
+                createdAt: conversation.createdAt,
+                unreadCount: conversation.unreadCount ?? existingPreview?.unreadCount ?? 0,
+              }
+            }
+            return previews
+          })
+        }
+      } catch (error) {
+        if (active) {
+          console.error('Failed to load recent messages:', error)
+        }
+      }
+    }
+
+    loadConversationPreviews()
+    return () => {
+      active = false
+    }
+  }, [currentUserId])
+
+  console.log(conversationPreviews);
+  
+
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
