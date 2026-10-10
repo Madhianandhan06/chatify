@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { API_URL, SOCKET_URL } from '../src/apiConfig'
+
+const MESSAGE_PAGE_SIZE = 50
 
 function getId(value) {
   return value == null ? '' : String(value)
@@ -47,10 +49,15 @@ function Home({ user }) {
 
   const socketRef = useRef(null)
   const selectedUserRef = useRef(null)
-  // console.log(selectedUserRef);
-  
   const conversationRequestRef = useRef(0)
   const messagesContainerRef = useRef(null)
+
+  const conversationLoadingRef = useRef(false)
+  const loadingOlderMessagesRef = useRef(false)
+  const shouldScrollToBottomRef = useRef(false)
+  const pendingScrollAdjustmentRef = useRef(null)
+  const [hasOlderMessages, setHasOlderMessages] = useState(false)
+  const [olderMessagesError, setOlderMessagesError] = useState('')
 
     useEffect(() => {
     let active = true
@@ -154,6 +161,12 @@ function Home({ user }) {
         }
 
         if (!belongsToOpenChat) return
+        if (!conversationLoadingRef.current) {
+          const container = messagesContainerRef.current
+          shouldScrollToBottomRef.current =
+            !container ||
+            container.scrollHeight - container.clientHeight - container.scrollTop < 80
+        }
         setMessages((current) => (current.some((existing) => getId(existing._id) === getId(message._id)) ? current : [...current, message]))
       } catch (error) {
         console.error('Invalid WebSocket payload:', error)
@@ -248,20 +261,30 @@ function Home({ user }) {
   
 
 
-  useEffect(() => {
-    const messagesContainer = messagesContainerRef.current
-    if (messagesContainer) {
-      messagesContainer.scrollTo({
-        top: messagesContainer.scrollHeight,
-        behavior: 'smooth',
-      })
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const adjustment = pendingScrollAdjustmentRef.current
+    if (adjustment) {
+      container.scrollTop = adjustment.scrollTop + container.scrollHeight - adjustment.scrollHeight
+      pendingScrollAdjustmentRef.current = null
+      return
     }
-  }, [messages, selectedUser])
+
+    if (conversationLoading || !shouldScrollToBottomRef.current) return
+    container.scrollTop = container.scrollHeight
+    shouldScrollToBottomRef.current = false
+  }, [messages, selectedUser, conversationLoading])
 
   async function openConversation(otherUser) {
     const requestId = conversationRequestRef.current + 1
     conversationRequestRef.current = requestId
     selectedUserRef.current = otherUser
+    conversationLoadingRef.current = true
+    shouldScrollToBottomRef.current = true
+    pendingScrollAdjustmentRef.current = null
+    loadingOlderMessagesRef.current = false
     setSelectedUser(otherUser)
     // Clear this conversation's badge as soon as it is opened; leave its
     // latest-message preview intact for the conversation list.
@@ -275,12 +298,15 @@ function Home({ user }) {
       }
     })
     setMessages([])
+    setHasOlderMessages(false)
+    setOlderMessagesError('')
     setDraft('')
     setConversationError('')
     setConversationLoading(true)
 
     try {
-      const response = await fetch(`${API_URL}/messages/${otherUser._id}`, {
+      const query = new URLSearchParams({ limit: String(MESSAGE_PAGE_SIZE) })
+      const response = await fetch(`${API_URL}/messages/${otherUser._id}?${query}`, {
         credentials: 'include',
       })
       const data = await response.json()
@@ -288,12 +314,13 @@ function Home({ user }) {
       if (!response.ok) {
         throw new Error(data.message || 'Could not load this conversation.')
       }
-      if (!Array.isArray(data)) {
+      if (!data || !Array.isArray(data.messages) || typeof data.hasMore !== 'boolean') {
         throw new Error('Unexpected response while loading conversation.')
       }
 
       if (conversationRequestRef.current === requestId) {
-        setMessages(data)
+        setMessages(data.messages)
+        setHasOlderMessages(data.hasMore)
       }
       await fetch(`${API_URL}/messages/${otherUser._id}/read`, {
         method: 'PATCH',
@@ -305,7 +332,63 @@ function Home({ user }) {
       }
     } finally {
       if (conversationRequestRef.current === requestId) {
+        conversationLoadingRef.current = false
         setConversationLoading(false)
+      }
+    }
+  }
+
+  async function loadOlderMessages() {
+    const container = messagesContainerRef.current
+    const firstMessage = messages[0]
+
+    if (
+      !container ||
+      container.scrollTop > 80 ||
+      !firstMessage ||
+      !hasOlderMessages ||
+      loadingOlderMessagesRef.current ||
+      !selectedUser
+    ) {
+      return
+    }
+
+    const requestId = conversationRequestRef.current
+    loadingOlderMessagesRef.current = true
+    setOlderMessagesError('')
+
+    try {
+      const query = new URLSearchParams({
+        limit: String(MESSAGE_PAGE_SIZE),
+        before: getId(firstMessage._id),
+      })
+      const response = await fetch(`${API_URL}/messages/${selectedUser._id}?${query}`, {
+        credentials: 'include',
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Could not load older messages.')
+      }
+      if (!data || !Array.isArray(data.messages) || typeof data.hasMore !== 'boolean') {
+        throw new Error('Unexpected response while loading older messages.')
+      }
+
+      if (conversationRequestRef.current === requestId) {
+        pendingScrollAdjustmentRef.current = {
+          scrollHeight: container.scrollHeight,
+          scrollTop: container.scrollTop,
+        }
+        setMessages((current) => [...data.messages, ...current])
+        setHasOlderMessages(data.hasMore)
+      }
+    } catch (error) {
+      if (conversationRequestRef.current === requestId) {
+        setOlderMessagesError(error.message || 'Could not load older messages.')
+      }
+    } finally {
+      if (conversationRequestRef.current === requestId) {
+        loadingOlderMessagesRef.current = false
       }
     }
   }
@@ -313,8 +396,14 @@ function Home({ user }) {
   function closeConversation() {
     conversationRequestRef.current += 1
     selectedUserRef.current = null
+    conversationLoadingRef.current = false
+    loadingOlderMessagesRef.current = false
+    shouldScrollToBottomRef.current = false
+    pendingScrollAdjustmentRef.current = null
     setSelectedUser(null)
     setMessages([])
+    setHasOlderMessages(false)
+    setOlderMessagesError('')
     setDraft('')
     setConversationError('')
   }
@@ -494,7 +583,23 @@ function Home({ user }) {
                 </div>
               </header>
 
-              <div ref={messagesContainerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4 sm:p-6">
+              <div
+                ref={messagesContainerRef}
+                onScroll={loadOlderMessages}
+                className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4 sm:p-6"
+              >
+                {olderMessagesError && (
+                  <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                    {olderMessagesError}
+                    <button
+                      type="button"
+                      onClick={loadOlderMessages}
+                      className="ml-2 font-semibold underline"
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
                 {conversationLoading && (
                   <p className="text-sm text-slate-500">Loading conversation…</p>
                 )}

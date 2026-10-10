@@ -21,4 +21,8 @@ const msgSchema = new mongoose.Schema({
         default: false
     }
 }, { timestamps: true })
+
+msgSchema.index({ sender: 1, receiver: 1, createdAt: -1, _id: -1 })
+msgSchema.index({ receiver: 1, sender: 1, createdAt: -1, _id: -1 })
+
 export default mongoose.model('Message', msgSchema)

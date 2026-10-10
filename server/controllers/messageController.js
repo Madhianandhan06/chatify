@@ -3,19 +3,26 @@ import Message from '../models/MsgModel.js'
 
 
 export const getConversation = async (req, res) => {
-
-    console.log('Current user:', req.user._id)
-    console.log('Other user:', req.params.userId)
   const otherUserId = req.params.userId
 
   if (!mongoose.isValidObjectId(otherUserId)) {
     return res.status(400).json({ message: 'Invalid user ID' })
   }
 
+  const requestedLimit = Number(req.query.limit ?? 50)
+  if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
+    return res.status(400).json({ message: 'Limit must be a positive integer' })
+  }
+
+  const limit = Math.min(requestedLimit, 100)
+  const beforeId = req.query.before
+  if (beforeId && !mongoose.isValidObjectId(beforeId)) {
+    return res.status(400).json({ message: 'Invalid message cursor' })
+  }
+
   try {
     const currentUserId = req.user._id
-
-    const messages = await Message.find({
+    const conversationFilter = {
       $or: [
         {
           sender: currentUserId,
@@ -26,12 +33,44 @@ export const getConversation = async (req, res) => {
           receiver: currentUserId
         }
       ]
-    }).sort({ createdAt: 1 })
+    }
+    let query = conversationFilter
 
-    res.json(messages)
+    if (beforeId) {
+      const cursor = await Message.findOne({
+        _id: beforeId,
+        ...conversationFilter,
+      }).select('createdAt')
+
+      if (!cursor) {
+        return res.status(400).json({ message: 'Message cursor is not in this conversation' })
+      }
+
+      query = {
+        $and: [
+          conversationFilter,
+          {
+            $or: [
+              { createdAt: { $lt: cursor.createdAt } },
+              { createdAt: cursor.createdAt, _id: { $lt: cursor._id } }
+            ]
+          }
+        ]
+      }
+    }
+
+    const results = await Message.find(query)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
+      .lean()
+
+    const hasMore = results.length > limit
+    const messages = results.slice(0, limit).reverse()
+
+    res.json({ messages, hasMore })
 
   } catch (error) {
-    console.error(error)
+    console.error('Failed to fetch conversation:', error)
 
     res.status(500).json({
       message: 'Failed to fetch conversation'
