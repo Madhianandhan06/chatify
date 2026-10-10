@@ -50,7 +50,7 @@ function Home({ user }) {
   // console.log(selectedUserRef);
   
   const conversationRequestRef = useRef(0)
-  const messagesEndRef = useRef(null)
+  const messagesContainerRef = useRef(null)
 
     useEffect(() => {
     let active = true
@@ -249,8 +249,14 @@ function Home({ user }) {
 
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    const messagesContainer = messagesContainerRef.current
+    if (messagesContainer) {
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: 'smooth',
+      })
+    }
+  }, [messages, selectedUser])
 
   async function openConversation(otherUser) {
     const requestId = conversationRequestRef.current + 1
@@ -342,9 +348,9 @@ function Home({ user }) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-6">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl overflow-hidden rounded-2xl bg-white shadow-lg">
-        <aside className={`${selectedUser ? 'hidden md:flex' : 'flex'} w-full flex-col border-r border-slate-200 md:w-80`}>
+    <main className="h-dvh overflow-hidden bg-slate-100 p-4 text-slate-900 sm:p-6">
+      <div className="mx-auto flex h-full min-h-0 max-w-6xl overflow-hidden rounded-2xl bg-white shadow-lg">
+        <aside className={`${selectedUser ? 'hidden md:flex' : 'flex'} min-h-0 w-full flex-col border-r border-slate-200 md:w-80`}>
           <header className="border-b border-slate-200 p-5">
             <h1 className="text-2xl font-semibold">Chatify</h1>
             <p className="mt-1 truncate text-sm text-slate-500">
@@ -468,7 +474,7 @@ function Home({ user }) {
           </footer>
         </aside>
 
-        <section className={`${selectedUser ? 'flex' : 'hidden md:flex'} min-w-0 flex-1 flex-col`}>
+        <section className={`${selectedUser ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}>
           {selectedUser ? (
             <>
               <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
@@ -488,7 +494,7 @@ function Home({ user }) {
                 </div>
               </header>
 
-              <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4 sm:p-6">
+              <div ref={messagesContainerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4 sm:p-6">
                 {conversationLoading && (
                   <p className="text-sm text-slate-500">Loading conversation…</p>
                 )}
@@ -523,7 +529,6 @@ function Home({ user }) {
                     </div>
                   )
                 })}
-                <div ref={messagesEndRef} />
               </div>
 
               {socketError && (
